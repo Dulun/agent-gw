@@ -81,6 +81,8 @@ EOF
 
 echo "--- vm ---"
 ./vm/setup-vm.sh
+echo "--- cache ---"
+./cache/setup-cache.sh
 echo "--- gateway ---"
 
 docker compose build

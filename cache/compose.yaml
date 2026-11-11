@@ -1,0 +1,46 @@
+# Host-side caches for the KVM guest. The guest only talks to 192.168.122.1 (virbr0);
+# upstream is fetched once, through the host proxy, on a cache miss.
+name: agent-gw-cache
+
+services:
+  # npm registry pull-through: guest uses http://192.168.122.1:4873/
+  verdaccio:
+    image: verdaccio/verdaccio:6 # pinned: sha256:68a4f7c7769846226928f3ef7dcc173d5239d40a138e4fd4b436a38a94f64091
+    container_name: ci-verdaccio
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - /srv/ci-cache/verdaccio/config.yaml:/verdaccio/conf/config.yaml:ro
+      - /srv/ci-cache/verdaccio/storage:/verdaccio/storage
+
+  # Docker Hub pull-through: guest dockerd uses registry-mirrors http://192.168.122.1:5000
+  registry-hub:
+    image: registry:2.8.3 # pinned: sha256:2a6992855d017a595610e58ec68ebc68c25ac6184cc91222ff08ad67e547b215
+    container_name: ci-registry-hub
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      REGISTRY_HTTP_ADDR: 192.168.122.1:5000
+      REGISTRY_PROXY_REMOTEURL: https://registry-1.docker.io
+      REGISTRY_STORAGE_DELETE_ENABLED: 'true'
+      HTTP_PROXY: ${HOST_PROXY:-}
+      HTTPS_PROXY: ${HOST_PROXY:-}
+      NO_PROXY: 127.0.0.1,192.168.122.0/24
+    volumes:
+      - /srv/ci-cache/registry-hub:/var/lib/registry
+
+  # mcr.microsoft.com pull-through (.NET images): guest pulls 192.168.122.1:5001/<repo>@<digest>
+  registry-mcr:
+    image: registry:2.8.3 # pinned: sha256:2a6992855d017a595610e58ec68ebc68c25ac6184cc91222ff08ad67e547b215
+    container_name: ci-registry-mcr
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      REGISTRY_HTTP_ADDR: 192.168.122.1:5001
+      REGISTRY_PROXY_REMOTEURL: https://mcr.microsoft.com
+      REGISTRY_STORAGE_DELETE_ENABLED: 'true'
+      HTTP_PROXY: ${HOST_PROXY:-}
+      HTTPS_PROXY: ${HOST_PROXY:-}
+      NO_PROXY: 127.0.0.1,192.168.122.0/24
+    volumes:
+      - /srv/ci-cache/registry-mcr:/var/lib/registry

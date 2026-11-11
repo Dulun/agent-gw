@@ -1,0 +1,5 @@
+# /etc/exports.d/agent-gw-cache.exports — shared pnpm store, npm cache and tool cache for the guest.
+# all_squash + anonuid=1000: the guest reads and writes as uid 1000.
+# async: the host acknowledges writes before they reach disk. Much faster for the many small files
+# of tool and package caches; a host crash can leave a half-written entry (clear it and retry).
+/srv/ci-cache 192.168.122.0/24(rw,async,no_subtree_check,all_squash,anonuid=1000,anongid=1000)

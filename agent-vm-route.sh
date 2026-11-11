@@ -50,7 +50,37 @@ guard() {
   nft add rule inet "$NFT_GUARD" egress ether saddr "$VM_MAC" oifname "$LAN_IF" counter accept
   nft add rule inet "$NFT_GUARD" egress ether saddr "$VM_MAC" ip daddr "$HOME_CIDR" counter accept
   nft add rule inet "$NFT_GUARD" egress ether saddr "$VM_MAC" counter drop
+  persist_lock
 }
+
+# A second, identical guard owned by /etc/nftables.conf and loaded by nftables.service at boot.
+# Nothing in this repo deletes it, so stopping/failing our units, flushing the dynamic table, or
+# a broken reboot still cannot let the guest out. Editing /etc/nftables.conf is the only way.
+persist_lock() {
+  local conf=/etc/nftables.conf mac="$VM_MAC"
+  [ -n "$mac" ] || mac='00:00:00:00:00:00'
+  cat >"$conf" <<EOF
+#!/usr/sbin/nft -f
+# Managed by agent-gw: permanent fail-closed egress guard for ${VM_IP}.
+# No flush ruleset: other subsystems (docker, libvirt) own their own tables.
+# add+delete makes reloading this file idempotent instead of stacking duplicate rules.
+add table inet agentvm_lock
+delete table inet agentvm_lock
+table inet agentvm_lock {
+  chain egress {
+    type filter hook forward priority filter + 5; policy accept;
+    ether saddr ${mac} oifname "${TUN_DEV}" accept
+    ether saddr ${mac} oifname "${LAN_IF}" accept
+    ether saddr ${mac} ip daddr ${HOME_CIDR} accept
+    ether saddr ${mac} counter drop
+    iifname "${LAN_IF}" counter drop
+  }
+}
+EOF
+  nft -f "$conf" 2>/dev/null || { echo "persist_lock: nft -f failed" >&2; return 0; }
+  systemctl enable --now nftables.service >/dev/null 2>&1 || true
+}
+
 
 route() {
   need_root

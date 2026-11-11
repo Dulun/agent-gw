@@ -17,6 +17,7 @@ interface or is dropped. It never falls back to direct.
 | `agent-vm-{guard,route}.service` | systemd units (guard runs before libvirt) |
 | `gw-data/` | rendered runtime state (gitignored) |
 | `AGENTS.md` / `PITFALLS.md` | invariants for coding agents; every trap already hit |
+| `test/matrix.sh` | scenario matrix proving the guest never sees the home IP |
 
 ## How it works
 

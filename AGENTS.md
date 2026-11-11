@@ -25,6 +25,10 @@ proxy client is a **separate** instance and must never be able to influence the 
 
 - **Fail closed.** If `tun-gw`, the container, or the node is gone, the guest has no network.
   It must never reach the internet directly. Anything that weakens this is a bug, not a preference.
+- **Two layers of guard.** `agentvm_guard` (dynamic, owned by this repo) and `agentvm_lock`
+  (written to `/etc/nftables.conf`, loaded by `nftables.service`, never deleted by this repo).
+  Stopping or flushing the dynamic layer must not open a path; only editing `/etc/nftables.conf`
+  can relax the lock. Do not move lock rules into the script-owned table.
 - **No `DIRECT` reachable.** `mode:` must stay `rule`, `rules` must end in `MATCH,EXIT`, and no
   proxy-group may list `DIRECT`. A `GLOBAL` group must exist and point at `EXIT` so an API mode
   switch cannot fall back to the built-in `DIRECT` (that fallback dials from the host, where the
@@ -63,10 +67,13 @@ ssh root@192.168.122.200 'curl -s https://ipinfo.io/json'   # must be the node's
 Negative test, the one that matters (briefly drops the guest's network):
 
 ```bash
-docker stop agent-gw-core
-ssh root@192.168.122.200 'curl -s -m 8 https://ipinfo.io/json; echo RC:$?'   # must fail, never a home IP
-docker start agent-gw-core
+sudo test/matrix.sh    # all scenarios; PASS means the guest never saw the home IP
 ```
+
+It stops the core, removes the policy route, flushes the dynamic guard, stops both units, reloads
+`nftables.service`, and blackholes the node, asserting after each step that the guest is either on
+the node's IP or blocked — never the home IP. The blackhole step also breaks the desktop client for
+that node while it runs; the script removes it on exit via a trap.
 
 ## Conventions
 

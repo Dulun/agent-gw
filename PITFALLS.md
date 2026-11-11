@@ -167,3 +167,37 @@ Symptom: `sudo: preserving the entire environment is not supported, '-E' is igno
 script sees empty values.
 
 Fix: `sudo env VAR=value ... ./script.sh`, which `setup.sh` does.
+
+## 17. Stopping the units opened the guest
+
+Symptom: `systemctl stop agent-vm-guard` left the guest with a direct path again.
+
+Cause: the guard lived only in the script-owned table, and `unguard` deleted it. A reboot where the
+unit failed, or a manual flush, produced the same hole.
+
+Fix: `persist_lock` writes an identical `agentvm_lock` table into `/etc/nftables.conf` and enables
+`nftables.service`. Nothing in this repo deletes that table, so the guest stays blocked even with
+both units stopped, the dynamic table flushed, or `nftables.service` reloaded. The file uses
+`add table` + `delete table` before defining itself so reloading it never stacks duplicate rules.
+It deliberately contains no `flush ruleset`; docker and libvirt own other tables.
+
+## 18. Blackholing the node also breaks the desktop client
+
+Symptom: while testing "node down", the desktop proxy panel showed the same node as Timeout.
+
+Cause: `ip route add blackhole <node>/32` is host-wide; the desktop client dials the same server.
+
+Fix: acceptable for a short test — the matrix script removes it in a `trap ... EXIT`. Use
+`ip route add blackhole <ip>/32` / `ip route del blackhole <ip>/32`; `ip route replace ... blackhole`
+is rejected with `Invalid argument`, and a `blackhole` route makes `ip route get` itself fail.
+
+## 19. A test that probes during container boot lies
+
+Symptom: "baseline" reported BLOCKED, and every later restore reported BLOCKED, although the stack
+was fine seconds later.
+
+Cause: `docker restart` returns before mihomo has created `tun-gw` and completed the node handshake,
+so the probe raced the boot.
+
+Fix: `wait_for` polls until the expected state is observed twice, 3s apart. Any scenario script must
+wait for stability, not for a fixed sleep.

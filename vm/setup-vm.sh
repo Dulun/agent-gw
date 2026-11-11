@@ -45,9 +45,17 @@ keys = sys.argv[3].strip().split("      ")
 keys = [k.strip() for k in keys if k.strip()]
 t = open(tpl, encoding='utf-8').read()
 t = t.replace('__SSH_KEYS__', '\n'.join('      ' + k for k in keys))
-import os
-t = t.replace('${VM_NAME}', os.environ.get('VM_NAME', 'agent-vm'))
+t = t.replace('${VM_NAME}', os.environ.get('VM_NAME', 'agent-vm-xlarge'))
 t = t.replace('${VM_IP}', os.environ.get('VM_IP', '192.168.122.200'))
+ts_host = os.environ.get('TS_HOSTNAME', '')
+ts_key = os.environ.get('TS_AUTHKEY', '')
+if ts_host and ts_key:
+    join = f"  - [sh, -c, 'tailscale up --hostname={ts_host} --auth-key={ts_key} --ssh=false']"
+elif ts_host:
+    join = f"  # tailscale: installed; join manually once: tailscale up --hostname={ts_host}"
+else:
+    join = "  # tailscale: skipped (TS_HOSTNAME empty)"
+t = t.replace('__TS_JOIN__', join)
 open(out, 'w', encoding='utf-8').write(t)
 print(f"{len(keys)} ssh keys")
 EOF

@@ -44,8 +44,11 @@ runcmd:
   - [sh, -c, 'rm -f /etc/apt/apt.conf.d/01kvm-gha-cache']
   - [netplan, apply]
   - [systemctl, restart, systemd-resolved]
-  - [systemctl, enable, --now, docker]
   - [systemctl, enable, --now, qemu-guest-agent]
   - [sh, -c, 'growpart /dev/vda 1 || true; resize2fs /dev/vda1 || true']
+  # tailscale (optional): installed always, joined only when TS_AUTHKEY is baked in.
+  # Install once via repo: https://pkgs.tailscale.com/stable/ubuntu/noble.tailscale-keyring.list
+  - [sh, -c, 'command -v tailscale >/dev/null || (curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg -o /usr/share/keyrings/tailscale-archive-keyring.gpg && curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.tailscale-keyring.list -o /etc/apt/sources.list.d/tailscale.list && apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tailscale && systemctl enable --now tailscaled)']
+__TS_JOIN__
 
 final_message: agent-vm cloud-init finished

@@ -1,0 +1,7 @@
+.env
+gw-data/
+!gw-data/.gitkeep
+*.qcow2
+*.iso
+docker-compose.yml.bak
+__pycache__/

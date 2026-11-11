@@ -1,0 +1,31 @@
+name: agent-gw
+
+services:
+  gateway-core:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    image: agent-gw-core:latest
+    container_name: agent-gw-core
+    restart: always
+    network_mode: host
+    privileged: true
+    env_file: [.env]
+    volumes:
+      - ../gw-data:/etc/mihomo
+      - ./gateway/entrypoint.sh:/entrypoint.sh:ro
+    entrypoint: ["/entrypoint.sh"]
+
+  # The only Web panel: status + node switch + killswitch state (no daily-direct mode)
+  gw-web:
+    build:
+      context: ./panel
+      dockerfile: Dockerfile
+    image: agent-gw-panel:latest
+    container_name: agent-gw-web
+    restart: always
+    network_mode: host
+    privileged: true
+    env_file: [.env]
+    volumes:
+      - ../gw-data/node-server-ip.env:/tmp/node-server-ip.env:ro

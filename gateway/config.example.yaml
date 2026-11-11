@@ -1,0 +1,58 @@
+# agent-gw mihomo config template: copy is rendered by setup.sh into gw-data/config.yaml.
+# Public DNS, no secrets; secret is just the loopback API password, setup.sh generates a random one.
+mixed-port: ${MIXED_PORT:-11095}
+allow-lan: false
+bind-address: 127.0.0.1
+mode: global
+experimental:
+  ignore-resolve-fail: true
+sniffer:
+  enable: true
+  override-destination: true
+  force-dns-mapping: true
+  parse-pure-ip: true
+  sniff:
+    HTTP:
+      ports: [80, 8080-8880]
+      override-destination: true
+    TLS:
+      ports: [443, 8443]
+      override-destination: true
+    QUIC:
+      ports: [443, 8443]
+      override-destination: true
+log-level: warning
+ipv6: false
+external-controller: 127.0.0.1:${CTRL_PORT:-11098}
+secret: ${API_SECRET:?set API_SECRET in .env}
+tun:
+  enable: true
+  device: ${TUN_DEV:-tun-gw}
+  stack: system
+  auto-route: false
+  auto-detect-interface: false
+  inet4-address: [${TUN_ADDR:-198.19.0.1/30}]
+  mtu: 1500
+dns:
+  enable: true
+  listen: 192.168.122.1:${DNS_PORT:-1053}
+  ipv6: false
+  enhanced-mode: fake-ip
+  # shortcut: offset from desktop clash verge's 198.18.0.0/16 so the local TUN never answers our fake-ip
+  fake-ip-range: ${FAKE_IP_RANGE:-198.20.0.0/16}
+  fake-ip-filter: ['+.lan', '+.local', 'time.*', 'ntp.*']
+  use-hosts: true
+  default-nameserver: [223.5.5.5, 119.29.29.29]
+  nameserver: ['tls://223.5.5.5:853', 'tls://1.12.12.12:853']
+# Fixed nodes for agent-vm (kept separate from the subscription you switch daily)
+proxies: []
+proxy-groups:
+- name: "EXIT"
+  type: select
+  proxies: []
+- name: "WEBRTC-BLOCK"
+  type: select
+  proxies: [REJECT]
+rules:
+- AND,((NETWORK,UDP),(DST-PORT,3478/5349/19302)),"WEBRTC-BLOCK"
+- MATCH,"EXIT"

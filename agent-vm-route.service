@@ -1,0 +1,14 @@
+[Unit]
+Description=Transparent proxy route for agent-vm (agent-gw)
+After=network-online.target docker.service agent-vm-guard.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/bin/sh -c 'for i in $(seq 30); do ip link show tun-gw >/dev/null 2>&1 && exit 0; sleep 2; done; exit 1'
+ExecStart=/home/tony/dev/agent-gw/agent-vm-route.sh route
+ExecStop=/home/tony/dev/agent-gw/agent-vm-route.sh down
+
+[Install]
+WantedBy=multi-user.target

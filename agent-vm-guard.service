@@ -1,0 +1,14 @@
+[Unit]
+Description=Fail-closed egress guard for agent-vm (agent-gw)
+Before=libvirtd.service virtqemud.service libvirtd.socket virtqemud.socket
+After=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/home/tony/dev/agent-gw/agent-vm-route.sh guard
+ExecStop=/home/tony/dev/agent-gw/agent-vm-route.sh down
+
+[Install]
+WantedBy=multi-user.target

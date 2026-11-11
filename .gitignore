@@ -5,3 +5,7 @@ gw-data/
 *.iso
 docker-compose.yml.bak
 __pycache__/
+vm.env
+vm/*.iso
+nodes.yaml
+!nodes.yaml.example

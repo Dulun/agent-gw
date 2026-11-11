@@ -12,7 +12,7 @@ services:
     privileged: true
     env_file: [.env]
     volumes:
-      - ../gw-data:/etc/mihomo
+      - ./gw-data:/etc/mihomo
       - ./gateway/entrypoint.sh:/entrypoint.sh:ro
     entrypoint: ["/entrypoint.sh"]
 
@@ -28,4 +28,4 @@ services:
     privileged: true
     env_file: [.env]
     volumes:
-      - ../gw-data/node-server-ip.env:/tmp/node-server-ip.env:ro
+      - ./gw-data/node-server-ip.env:/tmp/node-server-ip.env:ro

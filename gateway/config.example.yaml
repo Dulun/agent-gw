@@ -24,14 +24,14 @@ sniffer:
 log-level: warning
 ipv6: false
 external-controller: 127.0.0.1:${CTRL_PORT:-11098}
-secret: ${API_SECRET:?set API_SECRET in .env}
+secret: ${API_SECRET}
 tun:
   enable: true
   device: ${TUN_DEV:-tun-gw}
   stack: system
   auto-route: false
   auto-detect-interface: false
-  inet4-address: [${TUN_ADDR:-198.19.0.1/30}]
+  inet4-address: ["${TUN_ADDR:-198.19.0.1/30}"]
   mtu: 1500
 dns:
   enable: true
@@ -39,7 +39,7 @@ dns:
   ipv6: false
   enhanced-mode: fake-ip
   # shortcut: offset from desktop clash verge's 198.18.0.0/16 so the local TUN never answers our fake-ip
-  fake-ip-range: ${FAKE_IP_RANGE:-198.20.0.0/16}
+  fake-ip-range: "${FAKE_IP_RANGE:-198.20.0.0/16}"
   fake-ip-filter: ['+.lan', '+.local', 'time.*', 'ntp.*']
   use-hosts: true
   default-nameserver: [223.5.5.5, 119.29.29.29]
@@ -50,9 +50,6 @@ proxy-groups:
 - name: "EXIT"
   type: select
   proxies: []
-- name: "WEBRTC-BLOCK"
-  type: select
-  proxies: [REJECT]
 rules:
-- AND,((NETWORK,UDP),(DST-PORT,3478/5349/19302)),"WEBRTC-BLOCK"
-- MATCH,"EXIT"
+- AND,((NETWORK,UDP),(DST-PORT,3478/5349/19302)),REJECT
+- MATCH,EXIT

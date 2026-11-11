@@ -1,0 +1,51 @@
+#cloud-config
+# Rendered by vm/setup-vm.sh from .env + vm.env (SSH keys, IP injected).
+hostname: ${VM_NAME}
+manage_etc_hosts: true
+timezone: Asia/Shanghai
+locale: en_US.UTF-8
+disable_root: false
+ssh_pwauth: false
+package_update: false
+package_upgrade: false
+
+write_files:
+  - path: /root/.ssh/authorized_keys
+    owner: root:root
+    permissions: '0600'
+    content: |
+__SSH_KEYS__
+  - path: /etc/ssh/sshd_config.d/99-agent-vm.conf
+    owner: root:root
+    permissions: '0644'
+    content: |
+      PermitRootLogin prohibit-password
+      PasswordAuthentication no
+  - path: /etc/netplan/99-agent-ip.yaml
+    owner: root:root
+    permissions: '0600'
+    content: |
+      network:
+        version: 2
+        ethernets:
+          enp1s0:
+            dhcp4: false
+            addresses: [${VM_IP}/24]
+            routes:
+              - to: default
+                via: 192.168.122.1
+            nameservers:
+              addresses: [192.168.122.1]
+
+runcmd:
+  - [usermod, -p, '*', root]
+  - [systemctl, enable, --now, ssh]
+  - [systemctl, reload, ssh]
+  - [sh, -c, 'rm -f /etc/apt/apt.conf.d/01kvm-gha-cache']
+  - [netplan, apply]
+  - [systemctl, restart, systemd-resolved]
+  - [systemctl, enable, --now, docker]
+  - [systemctl, enable, --now, qemu-guest-agent]
+  - [sh, -c, 'growpart /dev/vda 1 || true; resize2fs /dev/vda1 || true']
+
+final_message: agent-vm cloud-init finished

@@ -1,0 +1,4 @@
+# paste proxy list here, e.g.:
+# - name: my-node
+#   type: hysteria2
+#   ...

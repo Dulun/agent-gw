@@ -15,7 +15,6 @@ PORT = int(os.environ.get("PANEL_PORT", "11088"))
 MIHOMO_API = f"http://127.0.0.1:{os.environ.get('CTRL_PORT', '11098')}"
 MIHOMO_PROXY = f"http://127.0.0.1:{os.environ.get('MIXED_PORT', '11095')}"
 SECRET = os.environ.get("API_SECRET", "")
-GROUP = os.environ.get("EXIT_GROUP", "EXIT")
 VM_MAC = os.environ.get("VM_MAC", "")
 drops = deque(maxlen=200)
 lock = threading.Lock()
@@ -101,7 +100,7 @@ class H(BaseHTTPRequestHandler):
             self.wfile.write(b)
         elif self.path == "/api/status":
             d = api("/proxies") or {}
-            g = (d.get("proxies") or {}).get(GROUP) or {}
+            g = (d.get("proxies") or {}).get("EXIT") or {}
             eg = "未知"
             try:
                 ph = urllib.request.ProxyHandler({"http": MIHOMO_PROXY, "https": MIHOMO_PROXY})
@@ -114,7 +113,7 @@ class H(BaseHTTPRequestHandler):
                 pass
             with lock:
                 n = len(drops)
-            self._json({"ks": ks_active(), "node": g.get("now", "未知"),
+            self._json({"ks": ks_active(), "node": g.get("now", "?"),
                         "nodes": g.get("all", []), "egress": eg, "drops": n})
         else:
             self.send_response(404)
@@ -127,8 +126,7 @@ class H(BaseHTTPRequestHandler):
         except Exception:
             body = {}
         if self.path == "/api/switch-node" and body.get("node"):
-            import urllib.parse as u
-            api(f"/proxies/{u.quote(GROUP, safe='')}", "PUT", {"name": body["node"]})
+            api("/proxies/EXIT", "PUT", {"name": body["node"]})
             api("/connections", "DELETE")
             self._json({"ok": True})
         elif self.path == "/api/reset-conns":

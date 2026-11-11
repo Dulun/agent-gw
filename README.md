@@ -5,12 +5,11 @@ fail-closed killswitch and a single Web panel. No second NIC, no Wi-Fi isolation
 segment: the guest's traffic either exits through the dedicated mihomo TUN
 interface or is dropped. It never falls back to direct.
 
-## Layout
-
 | Path | Role |
 |---|---|
-| `setup.sh` | only entry point: secrets -> config render -> containers -> killswitch |
-| `.env` / `.env.example` | machine config + node subscription (gitignored, never committed) |
+| `setup.sh` | only entry point: vm -> config render -> containers -> killswitch |
+| `.env` / `.env.example` + `nodes.yaml` | machine config + private nodes (gitignored) |
+| `vm/` | KVM guest definition: `setup-vm.sh` + cloud-init templates |
 | `gateway/config.example.yaml` | mihomo template rendered by `setup.sh` |
 | `gateway/Dockerfile` | mihomo baked in at build time (pinned version) |
 | `panel/` | the only Web UI: status + node switch (`:PANEL_PORT`) |
@@ -38,8 +37,10 @@ interface or is dropped. It never falls back to direct.
 ## Quick start
 
 ```bash
-cp .env.example .env
-# edit .env: VM_MAC, HOME_CIDR/HOME_IF, PROXY_PROVIDER_URL or PROXY_STATIC_YAML
+cp .env.example .env && cp vm/vm.env.example vm.env && cp nodes.yaml.example nodes.yaml
+# edit .env: VM_MAC, HOME_CIDR/HOME_IF
+# edit vm.env: GOLDEN_IMAGE (your golden qcow2), SSH_PUBKEYS
+# edit nodes.yaml: proxy list for this VM (or set PROXY_PROVIDER_URL in .env)
 ./setup.sh
 # panel: http://127.0.0.1:11088
 ```

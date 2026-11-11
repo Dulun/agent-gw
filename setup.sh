@@ -64,6 +64,21 @@ with open('gw-data/node-server-ip.env', 'w', encoding='utf-8') as f:
         f.write(f"{p.get('name','')}={p.get('server','')}\n")
 EOF
 
+# Fail closed: a DIRECT-reachable group, or global mode without a GLOBAL selector, makes mihomo
+# egress from the host itself, where the FORWARD-only nft guard cannot drop it (IP leak).
+python3 - gw-data/config.yaml <<'EOF'
+import sys, yaml
+d = yaml.safe_load(open(sys.argv[1], encoding='utf-8')) or {}
+mode = d.get('mode', 'rule')
+groups = {g.get('name'): g for g in d.get('proxy-groups') or []}
+if mode == 'global' and 'GLOBAL' not in groups:
+    sys.exit('leak: mode: global without a GLOBAL group falls back to DIRECT')
+for g in groups.values():
+    if 'DIRECT' in (g.get('proxies') or []):
+        sys.exit(f"leak: proxy-group {g.get('name')} can select DIRECT")
+print(f"config ok: mode={mode}, groups={list(groups)}, proxies={len(d.get('proxies') or [])}")
+EOF
+
 echo "--- vm ---"
 ./vm/setup-vm.sh
 echo "--- gateway ---"

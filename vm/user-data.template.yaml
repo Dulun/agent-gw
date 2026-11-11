@@ -2,7 +2,7 @@
 # Rendered by vm/setup-vm.sh from .env + vm.env (SSH keys, IP injected).
 hostname: ${VM_NAME}
 manage_etc_hosts: true
-timezone: Asia/Shanghai
+timezone: ${VM_TZ}
 locale: en_US.UTF-8
 disable_root: false
 ssh_pwauth: false

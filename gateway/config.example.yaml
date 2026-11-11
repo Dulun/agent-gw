@@ -3,7 +3,7 @@
 mixed-port: ${MIXED_PORT:-11095}
 allow-lan: false
 bind-address: 127.0.0.1
-mode: global
+mode: rule
 experimental:
   ignore-resolve-fail: true
 sniffer:
@@ -50,6 +50,10 @@ proxy-groups:
 - name: "EXIT"
   type: select
   proxies: []
+# shortcut: global mode ignores rules; without this group mihomo silently falls back to DIRECT and leaks.
+- name: "GLOBAL"
+  type: select
+  proxies: ["EXIT"]
 rules:
 - AND,((NETWORK,UDP),(DST-PORT,3478/5349/19302)),REJECT
 - MATCH,EXIT

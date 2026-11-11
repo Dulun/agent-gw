@@ -47,6 +47,7 @@ t = open(tpl, encoding='utf-8').read()
 t = t.replace('__SSH_KEYS__', '\n'.join('      ' + k for k in keys))
 t = t.replace('${VM_NAME}', os.environ.get('VM_NAME', 'agent-vm-xlarge'))
 t = t.replace('${VM_IP}', os.environ.get('VM_IP', '192.168.122.200'))
+t = t.replace('${VM_TZ}', os.environ.get('VM_TZ', 'America/Los_Angeles'))
 ts_host = os.environ.get('TS_HOSTNAME', '')
 ts_key = os.environ.get('TS_AUTHKEY', '')
 if ts_host and ts_key:

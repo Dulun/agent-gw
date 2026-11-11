@@ -8,7 +8,7 @@ Wants=network-pre.target
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/home/tony/dev/agent-gw/agent-vm-route.sh guard
-ExecStop=/home/tony/dev/agent-gw/agent-vm-route.sh down
+ExecStop=/home/tony/dev/agent-gw/agent-vm-route.sh unguard
 
 [Install]
 WantedBy=multi-user.target

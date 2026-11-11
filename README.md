@@ -16,6 +16,7 @@ interface or is dropped. It never falls back to direct.
 | `agent-vm-route.sh` | host nft guard + policy table 200 |
 | `agent-vm-{guard,route}.service` | systemd units (guard runs before libvirt) |
 | `gw-data/` | rendered runtime state (gitignored) |
+| `AGENTS.md` / `PITFALLS.md` | invariants for coding agents; every trap already hit |
 
 ## How it works
 
@@ -27,6 +28,17 @@ interface or is dropped. It never falls back to direct.
 - `agent-vm-route.sh route` adds `from VM_IP table 200` with default via
   `tun-gw`; guest DNS is hijacked to the gateway mihomo (`:1053`).
 - Panel shows killswitch state (read-only, always on), egress IP, node list.
+
+## Rules that keep it fail-closed
+
+- `mode: rule` + `MATCH,EXIT`; no group may reach `DIRECT`.
+- A `GLOBAL` group points at `EXIT`, so an API mode switch cannot fall back to `DIRECT`.
+- Node server IPs are pinned `/32` through the physical NIC, so the host's desktop TUN cannot
+  capture the gateway's own dial.
+- DNS upstream goes through `#EXIT`; a dead node kills DNS too.
+
+See [AGENTS.md](AGENTS.md) for the full invariant list and [PITFALLS.md](PITFALLS.md) for the
+failures that produced them.
 
 ## Requirements
 

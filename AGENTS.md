@@ -1,0 +1,77 @@
+# AGENTS.md
+
+Rules for coding agents working in this repository. Human docs are in [README.md](README.md);
+the traps that already cost time are in [PITFALLS.md](PITFALLS.md).
+
+## What this is
+
+One host runs one KVM guest (`agent-vm-xlarge`) whose egress is forced through a dedicated
+mihomo container (`agent-gw-core`, own `tun-gw`) with a fail-closed killswitch. The host's own
+proxy client is a **separate** instance and must never be able to influence the guest's egress.
+
+| Path | Role |
+| --- | --- |
+| `setup.sh` | only entry point: vm -> config render -> containers -> killswitch. Idempotent. |
+| `.env` / `vm.env` / `nodes.yaml` | machine config and private nodes. Gitignored, never referenced from committed files. |
+| `gateway/config.example.yaml` | mihomo template rendered by `setup.sh` from the environment. |
+| `gateway/entrypoint.sh` | mihomo + table-200 watchdog inside the container. |
+| `panel/app.py` | the only Web UI: killswitch state, egress, node switch. |
+| `agent-vm-route.sh` | host nft guard, policy table 200, node-route pinning. |
+| `agent-vm-{guard,route}.service` | systemd units; guard starts before libvirt. |
+| `vm/` | guest definition: `setup-vm.sh` + cloud-init templates. |
+| `gw-data/` | rendered runtime state. Gitignored. |
+
+## Invariants
+
+- **Fail closed.** If `tun-gw`, the container, or the node is gone, the guest has no network.
+  It must never reach the internet directly. Anything that weakens this is a bug, not a preference.
+- **No `DIRECT` reachable.** `mode:` must stay `rule`, `rules` must end in `MATCH,EXIT`, and no
+  proxy-group may list `DIRECT`. A `GLOBAL` group must exist and point at `EXIT` so an API mode
+  switch cannot fall back to the built-in `DIRECT` (that fallback dials from the host, where the
+  FORWARD-only nft guard cannot see it).
+- **Two independent proxies.** The host's desktop client and `agent-gw-core` share nothing but the
+  physical NIC. Node server IPs are pinned `/32` through the physical interface by `pin_nodes`,
+  because a desktop TUN with `auto-route` otherwise swallows the gateway's own dial.
+- **Guard and route are torn down separately.** `unguard` / `unroute` exist so restarting one unit
+  never silently removes the other half. `down` is for manual use only.
+- **The script loads its own config.** Units carry no `EnvironmentFile`; `agent-vm-route.sh` sources
+  `.env` and `vm.env` from its own directory so `VM_MAC` exists at boot.
+- **Secrets stay out of git.** Tokens, node credentials and the API secret live in `.env`,
+  `vm.env` and `nodes.yaml` only. `setup.sh` renders them into `gw-data/`, which is gitignored.
+- **One rendering step.** Templates use `${VAR}` / `${VAR:-default}` only; `setup.sh` substitutes
+  them. Do not use shell-only syntax such as `${VAR:?message}` in templates (the renderer's regex
+  does not understand it).
+
+## Checks
+
+Light and safe anywhere:
+
+```bash
+bash -n setup.sh && bash -n agent-vm-route.sh && bash -n vm/setup-vm.sh
+python3 -c "import ast; ast.parse(open('panel/app.py').read())"
+python3 -c "import yaml; yaml.safe_load(open('gateway/config.example.yaml'))"
+```
+
+Requires the running stack (read-only):
+
+```bash
+curl -s http://127.0.0.1:11088/api/status          # ks must be true
+sudo ./agent-vm-route.sh status
+ssh root@192.168.122.200 'curl -s https://ipinfo.io/json'   # must be the node's egress
+```
+
+Negative test, the one that matters (briefly drops the guest's network):
+
+```bash
+docker stop agent-gw-core
+ssh root@192.168.122.200 'curl -s -m 8 https://ipinfo.io/json; echo RC:$?'   # must fail, never a home IP
+docker start agent-gw-core
+```
+
+## Conventions
+
+- Shell: `set -Eeuo pipefail`, quote everything, English comments.
+- Comments explain *why*; a known limit is marked `shortcut: <limit>, <when to upgrade>`.
+- Commits: `type(scope): <emoji> subject`, e.g. `fix(route): 🐛 ...`.
+- Never add a second listener for the same guest, and never make the guest depend on the host's
+  desktop proxy client.

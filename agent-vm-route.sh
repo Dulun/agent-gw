@@ -6,8 +6,14 @@
 #   sudo ./agent-vm-route.sh up       # guard + route (idempotent)
 #   sudo ./agent-vm-route.sh guard    # killswitch only (no tun-gw needed, runs earliest at boot)
 #   sudo ./agent-vm-route.sh route    # table 200 only (needs tun-gw)
-#   sudo ./agent-vm-route.sh down|status
+#   sudo ./agent-vm-route.sh unguard|unroute|down|status
 set -Eeuo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# systemd units carry no EnvironmentFile; load the repo's own config so VM_MAC/HOME_IF exist at boot.
+for f in "$ROOT/.env" "$ROOT/vm.env"; do
+  [ -f "$f" ] && { set -a; . "$f"; set +a; }
+done
 
 VM_IP="${VM_IP:-192.168.122.200}"
 VM_MAC="${VM_MAC:-}"
@@ -94,13 +100,24 @@ EOF
 }
 
 
-down() {
+unguard() {
   need_root
-  ip rule del from "$VM_IP" table "$TABLE" 2>/dev/null || true
-  ip route flush table "$TABLE" 2>/dev/null || true
   nft delete table ip "$NFT_TABLE" 2>/dev/null || true
   nft delete table inet "$NFT_GUARD" 2>/dev/null || true
   iptables -D FORWARD -d "$VM_IP"/32 -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
+}
+
+unroute() {
+  need_root
+  ip rule del from "$VM_IP" table "$TABLE" 2>/dev/null || true
+  ip route flush table "$TABLE" 2>/dev/null || true
+}
+
+# Only for manual use: each systemd unit tears down just its own half, so restarting
+# one never silently removes the killswitch or the policy route belonging to the other.
+down() {
+  unguard
+  unroute
   status
 }
 
@@ -119,7 +136,9 @@ case "${1:-up}" in
   up) guard; route; status ;;
   guard) guard; status ;;
   route) route; status ;;
+  unguard) unguard; status ;;
+  unroute) unroute; status ;;
   down) down ;;
   status) status ;;
-  *) echo "usage: $0 {up|guard|route|down|status}" >&2; exit 2 ;;
+  *) echo "usage: $0 {up|guard|route|unguard|unroute|down|status}" >&2; exit 2 ;;
 esac

@@ -42,8 +42,9 @@ dns:
   fake-ip-range: "${FAKE_IP_RANGE:-198.20.0.0/16}"
   fake-ip-filter: ['+.lan', '+.local', 'time.*', 'ntp.*']
   use-hosts: true
-  default-nameserver: [223.5.5.5, 119.29.29.29]
-  nameserver: ['tls://223.5.5.5:853', 'tls://1.12.12.12:853']
+  # #EXIT forces the query through the node: no direct DNS left, so nothing resolves if the node is down.
+  default-nameserver: [1.1.1.1, 8.8.8.8]
+  nameserver: ['tls://1.1.1.1:853#EXIT', 'tls://8.8.8.8:853#EXIT']
 # Fixed nodes for agent-vm (kept separate from the subscription you switch daily)
 proxies: []
 proxy-groups:

@@ -54,7 +54,45 @@ route() {
   ip route replace default dev "$TUN_DEV" table "$TABLE"
   ip rule del from "$VM_IP" table "$TABLE" 2>/dev/null || true
   ip rule add from "$VM_IP" table "$TABLE" priority "$PRIO"
+  pin_nodes
 }
+
+# Keep the gateway's own dial to the node server out of the host's desktop TUN.
+# Without this, a host TUN with auto-route swallows that dial and the VM's egress
+# silently depends on whatever node the desktop is using (and dies with it).
+pin_nodes() {
+  need_root
+  local cfg gw ips ip
+  cfg="${CONFIG:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gw-data/config.yaml}"
+  [ -f "$cfg" ] || { echo "pin_nodes: no $cfg" >&2; return 0; }
+  gw="$(ip -4 route show default | awk 'NR==1{for(i=1;i<=NF;i++) if($i=="via") print $(i+1)}')"
+  [ -n "$gw" ] || { echo "pin_nodes: no default gateway" >&2; return 0; }
+  ips="$(python3 - "$cfg" <<'EOF'
+import socket, sys, yaml
+d = yaml.safe_load(open(sys.argv[1], encoding='utf-8')) or {}
+seen = set()
+for p in d.get('proxies') or []:
+    s = str((p or {}).get('server') or '').strip()
+    if not s:
+        continue
+    try:
+        socket.inet_aton(s)
+        seen.add(s)
+    except OSError:
+        try:
+            for _, _, _, _, sa in socket.getaddrinfo(s, None, socket.AF_INET):
+                seen.add(sa[0])
+        except OSError:
+            pass
+print('\n'.join(sorted(seen)))
+EOF
+)"
+  while read -r ip; do
+    [ -n "$ip" ] && ip route replace "$ip/32" via "$gw" dev "$HOME_IF"
+  done <<< "$ips"
+  echo "pinned node routes via ${HOME_IF} (gw ${gw})"
+}
+
 
 down() {
   need_root

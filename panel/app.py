@@ -17,6 +17,8 @@ from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PANEL_PORT", "11088"))
+# Loopback by default: the panel has no auth and can stop the VM / switch the node.
+BIND = os.environ.get("PANEL_BIND", "127.0.0.1")
 MIHOMO_API = f"http://127.0.0.1:{os.environ.get('CTRL_PORT', '11098')}"
 MIHOMO_PROXY = f"http://127.0.0.1:{os.environ.get('MIXED_PORT', '11095')}"
 SECRET = os.environ.get("API_SECRET", "")
@@ -420,4 +422,4 @@ class H(BaseHTTPRequestHandler):
         pass
 
 
-ThreadingHTTPServer(("0.0.0.0", PORT), H).serve_forever()
+ThreadingHTTPServer((BIND, PORT), H).serve_forever()

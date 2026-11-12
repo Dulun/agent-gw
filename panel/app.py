@@ -405,9 +405,16 @@ class H(BaseHTTPRequestHandler):
         except Exception:
             body = {}
         if self.path == "/api/switch-node" and body.get("node"):
-            api("/proxies/EXIT", "PUT", {"name": body["node"]})
+            want = str(body["node"])
+            allowed = ((api("/proxies") or {}).get("proxies") or {}).get("EXIT", {}).get("all") or []
+            # The panel can only pick one of the configured nodes. Anything else (DIRECT, GLOBAL,
+            # a typo, a crafted name) is refused here instead of being handed to mihomo.
+            if want not in allowed or want in ("DIRECT", "REJECT"):
+                self._json({"ok": False, "error": "node not allowed", "allowed": allowed}, 400)
+                return
+            api("/proxies/EXIT", "PUT", {"name": want})
             api("/connections", "DELETE")
-            self._json({"ok": True})
+            self._json({"ok": True, "node": want})
         elif self.path == "/api/vm/start":
             self._json({"ok": True, "out": sh(f"virsh -q start {shlex.quote(VM_NAME)} 2>&1", timeout=60)})
         elif self.path == "/api/vm/stop":

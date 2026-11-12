@@ -37,6 +37,9 @@ proxy client is a **separate** instance and must never be able to influence the 
 - **No private destination leaves through the node.** Global mode ignores proxy rules, so the
   RFC1918 / link-local / loopback / metadata block lives in the nft guard itself and applies to
   every mode.
+- **The panel cannot change the safety posture.** It exposes start/stop, the configured node list,
+  drop-connections and tests; `switch-node` validates against the live `EXIT.all` and refuses
+  `DIRECT`/`REJECT`. `mode`/`GLOBAL` have no endpoint at all.
 - **The panel has no auth, so it listens on loopback.** `PANEL_BIND` defaults to `127.0.0.1`;
   exposing it on a LAN/tailnet interface hands VM stop/start and node switching to anyone.
 - **The controller is root-only.** `external-controller` stays on `127.0.0.1`; an nft output rule

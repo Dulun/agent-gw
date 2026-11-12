@@ -23,6 +23,7 @@ TABLE="${TABLE:-200}"
 PRIO="${PRIO:-5200}"
 DNS_TARGET="${DNS_TARGET:-192.168.122.1:1053}"
 DNS_PORT="${DNS_PORT:-1053}"
+CTRL_PORT="${CTRL_PORT:-11098}"
 VM_NAME="${VM_NAME:-agent-vm-xlarge}"
 HOME_IF="${HOME_IF:-wlp6s0}"
 SSH_PORT="${SSH_PORT:-2222}"
@@ -63,6 +64,10 @@ guard() {
   nft add rule inet "$NFT_GUARD" ingress iifname "$LAN_IF" ether saddr "$VM_MAC" udp dport "$DNS_PORT" counter accept
   nft add rule inet "$NFT_GUARD" ingress iifname "$LAN_IF" ether saddr "$VM_MAC" tcp dport "$DNS_PORT" counter accept
   nft add rule inet "$NFT_GUARD" ingress iifname "$LAN_IF" ether saddr "$VM_MAC" counter drop
+  # The proxy controller is the one place that can make DIRECT reachable again. The guest is
+  # already firewalled off it; this also keeps local non-root users off it (the panel runs as root).
+  nft add chain inet "$NFT_GUARD" api '{ type filter hook output priority filter + 10; policy accept; }'
+  nft add rule inet "$NFT_GUARD" api tcp dport "$CTRL_PORT" meta skuid != 0 counter drop
   persist_lock
 }
 
@@ -88,6 +93,10 @@ table inet agentvm_lock {
     ether saddr ${mac} oifname "${TUN_DEV}" accept
     ether saddr ${mac} counter drop
     iifname "${LAN_IF}" counter drop
+  }
+  chain api {
+    type filter hook output priority filter + 5; policy accept;
+    tcp dport ${CTRL_PORT} meta skuid != 0 counter drop
   }
   chain ingress {
     type filter hook input priority filter + 5; policy accept;

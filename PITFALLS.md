@@ -272,3 +272,10 @@ Fix: the renderer writes `GLOBAL -> EXIT` explicitly, the assertion rejects a gl
 `GLOBAL` is not exactly `['EXIT']`, the container watchdog re-asserts `mode: global` and
 `GLOBAL: EXIT` every 10s, and the panel checks the live group. Private/metadata destinations moved
 into nft because global mode ignores proxy rules.
+
+## 19. The one place that can re-enable DIRECT is the controller
+
+`mode`/`GLOBAL` are only changeable through mihomo's API. The guest is firewalled off it, but any
+local process could call it. Fix: the nft output chain drops `$CTRL_PORT` for `meta skuid != 0`,
+`.env` (holding the API secret) is 600, and the watchdog re-asserts the safe values every 10s.
+`curl` as a normal user now times out; as root and from the panel it answers 200.

@@ -37,6 +37,9 @@ proxy client is a **separate** instance and must never be able to influence the 
 - **No private destination leaves through the node.** Global mode ignores proxy rules, so the
   RFC1918 / link-local / loopback / metadata block lives in the nft guard itself and applies to
   every mode.
+- **The controller is root-only.** `external-controller` stays on `127.0.0.1`; an nft output rule
+  drops port `$CTRL_PORT` for any socket whose uid is not 0, and `.env` is mode 600. The guest
+  cannot reach it either (input chain allows only the DNS proxy port).
 - **No `DIRECT` reachable.** `mode: global` with a `GLOBAL` group that lists exactly `EXIT`, and no
   proxy-group may list `DIRECT`. A global-mode switch to the built-in group would dial from the
   host, where the FORWARD-only nft guard cannot see it, so both the renderer and the container

@@ -7,6 +7,7 @@ and prove the guest is either on the node's egress or blocked.
 """
 import json
 import os
+import re
 import shlex
 import subprocess
 import threading
@@ -91,16 +92,25 @@ def guest_ids():
     return v
 
 
+EGRESS_ENDPOINTS = ("https://ifconfig.me/ip", "https://api.ipify.org", "https://ipinfo.io/ip")
+
+
 def gateway_egress():
-    try:
-        ph = urllib.request.ProxyHandler({"http": MIHOMO_PROXY, "https": MIHOMO_PROXY})
-        with urllib.request.build_opener(ph).open(
-                urllib.request.Request("https://ipinfo.io/json",
-                                       headers={"User-Agent": "curl/8.0"}), timeout=4) as r:
-            j = json.loads(r.read().decode())
-            return f"{j.get('country', '?')} {j.get('ip', '?')}", j.get("ip", "")
-    except Exception:
-        return "未知", ""
+    """First IPv4-looking answer from a few echo services; ipinfo rate-limits (429) under the
+    guest's own probes, which used to blank the whole check."""
+    ph = urllib.request.ProxyHandler({"http": MIHOMO_PROXY, "https": MIHOMO_PROXY})
+    opener = urllib.request.build_opener(ph)
+    for url in EGRESS_ENDPOINTS:
+        try:
+            with opener.open(urllib.request.Request(url, headers={"User-Agent": "curl/8.0"}),
+                             timeout=8) as r:
+                txt = r.read().decode(errors="replace").strip()
+        except Exception:
+            continue
+        m = re.search(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", txt)
+        if m:
+            return m.group(0), m.group(0)
+    return "未知", ""
 
 
 def guest_pipe(script, timeout=90):
@@ -136,10 +146,12 @@ def deep_tests():
     def is_node(v):
         return v.strip() == gw_ip
 
-    echoes = [kv.get(k, "").strip() for k in
-              ("IP_IPINFO", "IP_IFCONFIG", "IP_ICANHAZ", "IP_IPIFY", "IP_IPAPI")]
-    add("5 IP echo services -> node", gw_ip and all(e == gw_ip for e in echoes),
-        ",".join(sorted(set(echoes))) or "no answer")
+    raw = [kv.get(k, "").strip() for k in
+           ("IP_IPINFO", "IP_IFCONFIG", "IP_ICANHAZ", "IP_IPIFY", "IP_IPAPI")]
+    # An empty answer means blocked or rate-limited, which is safe; any *answer* must be the node.
+    echoes = [e for e in raw if re.fullmatch(r"(?:\d{1,3}\.){3}\d{1,3}", e)]
+    add("IP echo services -> node only", len(echoes) >= 2 and gw_ip and all(e == gw_ip for e in echoes),
+        f"{len(echoes)}/5 answered: " + ",".join(sorted(set(echoes))))
     add("no IPv6 egress", blocked(kv.get("V6", "")), kv.get("V6", "") or "BLOCKED")
     add("DoH lookup still exits via node", is_node(kv.get("DOH_EGRESS", "")) or blocked(kv.get("DOH_EGRESS", "")),
         kv.get("DOH_EGRESS", "") or "BLOCKED")

@@ -56,5 +56,17 @@ proxy-groups:
   type: select
   proxies: ["EXIT"]
 rules:
+# No private/link-local/metadata destination ever leaves through the node: the guest must not
+# reach the host LAN or any cloud metadata service, even tunneled.
+- IP-CIDR,0.0.0.0/8,REJECT,no-resolve
+- IP-CIDR,10.0.0.0/8,REJECT,no-resolve
+- IP-CIDR,100.64.0.0/10,REJECT,no-resolve
+- IP-CIDR,127.0.0.0/8,REJECT,no-resolve
+- IP-CIDR,169.254.0.0/16,REJECT,no-resolve
+- IP-CIDR,172.16.0.0/12,REJECT,no-resolve
+- IP-CIDR,192.168.0.0/16,REJECT,no-resolve
+- IP-CIDR,224.0.0.0/4,REJECT,no-resolve
 - AND,((NETWORK,UDP),(DST-PORT,3478/5349/19302)),REJECT
+# WebRTC is gone at the nft layer already; this is the second layer for anything that reaches here.
+- NETWORK,UDP,REJECT
 - MATCH,EXIT

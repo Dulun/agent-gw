@@ -1,0 +1,7 @@
+[Unit]
+Description=Keep agent-vm wall clock on the host clock (agent-gw)
+After=libvirtd.service virtqemud.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/tony/dev/agent-gw/agent-vm-route.sh clock

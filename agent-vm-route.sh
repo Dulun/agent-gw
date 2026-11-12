@@ -22,7 +22,8 @@ TUN_DEV="${TUN_DEV:-tun-gw}"
 TABLE="${TABLE:-200}"
 PRIO="${PRIO:-5200}"
 DNS_TARGET="${DNS_TARGET:-192.168.122.1:1053}"
-HOME_CIDR="${HOME_CIDR:-192.168.0.0/24}"
+DNS_PORT="${DNS_PORT:-1053}"
+VM_NAME="${VM_NAME:-agent-vm-xlarge}"
 HOME_IF="${HOME_IF:-wlp6s0}"
 SSH_PORT="${SSH_PORT:-2222}"
 NFT_TABLE='agentvm'
@@ -45,11 +46,21 @@ guard() {
   fi
   nft delete table inet "$NFT_GUARD" 2>/dev/null || true
   nft add table inet "$NFT_GUARD"
+  # forward: the guest may leave only through tun-gw, never over IPv6, never directly.
   nft add chain inet "$NFT_GUARD" egress '{ type filter hook forward priority filter + 10; policy accept; }'
+  nft add rule inet "$NFT_GUARD" egress meta nfproto ipv6 counter drop
+  # No UDP from the guest: that is WebRTC (STUN/TURN), QUIC, mDNS, NTP. HTTPS falls back to TCP.
+  nft add rule inet "$NFT_GUARD" egress ether saddr "$VM_MAC" meta l4proto udp counter drop
   nft add rule inet "$NFT_GUARD" egress ether saddr "$VM_MAC" oifname "$TUN_DEV" counter accept
-  nft add rule inet "$NFT_GUARD" egress ether saddr "$VM_MAC" oifname "$LAN_IF" counter accept
-  nft add rule inet "$NFT_GUARD" egress ether saddr "$VM_MAC" ip daddr "$HOME_CIDR" counter accept
   nft add rule inet "$NFT_GUARD" egress ether saddr "$VM_MAC" counter drop
+  # input: host -> guest stays possible (output hook), guest -> host does not, except the DNS
+  # proxy that the dnat rule above rewrites to this host:DNS_PORT.
+  nft add chain inet "$NFT_GUARD" ingress '{ type filter hook input priority filter + 10; policy accept; }'
+  nft add rule inet "$NFT_GUARD" ingress iifname "$LAN_IF" meta nfproto ipv6 counter drop
+  nft add rule inet "$NFT_GUARD" ingress iifname "$LAN_IF" ether saddr "$VM_MAC" ct state established,related counter accept
+  nft add rule inet "$NFT_GUARD" ingress iifname "$LAN_IF" ether saddr "$VM_MAC" udp dport "$DNS_PORT" counter accept
+  nft add rule inet "$NFT_GUARD" ingress iifname "$LAN_IF" ether saddr "$VM_MAC" tcp dport "$DNS_PORT" counter accept
+  nft add rule inet "$NFT_GUARD" ingress iifname "$LAN_IF" ether saddr "$VM_MAC" counter drop
   persist_lock
 }
 
@@ -69,11 +80,19 @@ delete table inet agentvm_lock
 table inet agentvm_lock {
   chain egress {
     type filter hook forward priority filter + 5; policy accept;
+    meta nfproto ipv6 counter drop
+    ether saddr ${mac} meta l4proto udp counter drop
     ether saddr ${mac} oifname "${TUN_DEV}" accept
-    ether saddr ${mac} oifname "${LAN_IF}" accept
-    ether saddr ${mac} ip daddr ${HOME_CIDR} accept
     ether saddr ${mac} counter drop
     iifname "${LAN_IF}" counter drop
+  }
+  chain ingress {
+    type filter hook input priority filter + 5; policy accept;
+    iifname "${LAN_IF}" meta nfproto ipv6 counter drop
+    iifname "${LAN_IF}" ether saddr ${mac} ct state established,related accept
+    iifname "${LAN_IF}" ether saddr ${mac} udp dport ${DNS_PORT} accept
+    iifname "${LAN_IF}" ether saddr ${mac} tcp dport ${DNS_PORT} accept
+    iifname "${LAN_IF}" ether saddr ${mac} counter drop
   }
 }
 EOF
@@ -86,7 +105,6 @@ route() {
   need_root
   ip link show "$TUN_DEV" >/dev/null 2>&1 || { echo "missing ${TUN_DEV}: start agent-gw-core first" >&2; exit 1; }
   ip route replace 192.168.122.0/24 dev "$LAN_IF" table "$TABLE"
-  ip route replace "$HOME_CIDR" dev "$HOME_IF" table "$TABLE"
   ip route replace default dev "$TUN_DEV" table "$TABLE"
   ip rule del from "$VM_IP" table "$TABLE" 2>/dev/null || true
   ip rule add from "$VM_IP" table "$TABLE" priority "$PRIO"
@@ -151,6 +169,13 @@ down() {
   status
 }
 
+# Keep the guest wall clock on the host clock (qemu-guest-agent), so the LA timezone in the
+# guest shows the node's local time without an NTP path that could leak.
+clock() {
+  need_root
+  virsh domtime "$VM_NAME" --sync >/dev/null
+}
+
 status() {
   echo "--- ip rule (${VM_IP} -> table ${TABLE}) ---"
   ip rule show | grep -F "from ${VM_IP}" || echo '(not installed)'
@@ -169,6 +194,7 @@ case "${1:-up}" in
   unguard) unguard; status ;;
   unroute) unroute; status ;;
   down) down ;;
+  clock) clock ;;
   status) status ;;
-  *) echo "usage: $0 {up|guard|route|unguard|unroute|down|status}" >&2; exit 2 ;;
+  *) echo "usage: $0 {up|guard|route|unguard|unroute|down|clock|status}" >&2; exit 2 ;;
 esac

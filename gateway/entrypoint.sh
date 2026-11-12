@@ -7,7 +7,6 @@ set -e
 TUN_DEV="${TUN_DEV:-tun-gw}"
 TABLE="${TABLE:-200}"
 BRIDGE="${BRIDGE:-virbr0}"
-HOME_CIDR="${HOME_CIDR:-192.168.0.0/24}"
 HOME_IF="${HOME_IF:-wlp6s0}"
 
 echo "[agent-gw] starting mihomo..."
@@ -32,7 +31,6 @@ done
     if ip link show "${TUN_DEV}" >/dev/null 2>&1; then
       if ! ip route show table "${TABLE}" | grep -q "${TUN_DEV}"; then
         ip route replace 192.168.122.0/24 dev "${BRIDGE}" table "${TABLE}" 2>/dev/null || true
-        ip route replace "${HOME_CIDR}" dev "${HOME_IF}" table "${TABLE}" 2>/dev/null || true
         ip route replace default dev "${TUN_DEV}" table "${TABLE}" 2>/dev/null || true
       fi
     fi

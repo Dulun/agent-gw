@@ -16,7 +16,8 @@ services:
       - ./gateway/entrypoint.sh:/entrypoint.sh:ro
     entrypoint: ["/entrypoint.sh"]
 
-  # The only Web panel: status + node switch + killswitch state (no daily-direct mode)
+  # The only UI. Host namespaces (nft, ip, virsh socket, ssh to the guest) are why it is
+  # privileged with network_mode: host. Standard python-slim base; no custom build here.
   gw-web:
     build:
       context: ./panel
@@ -27,5 +28,11 @@ services:
     network_mode: host
     privileged: true
     env_file: [.env]
+    environment:
+      SSH_KEY: /keys/id_ed25519
+      VM_NAME: ${VM_NAME:-agent-vm-xlarge}
+      VM_TZ: ${VM_TZ:-America/Los_Angeles}
     volumes:
-      - ./gw-data/node-server-ip.env:/tmp/node-server-ip.env:ro
+      - /var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock
+      - ${PANEL_SSH_KEY:?set PANEL_SSH_KEY in .env}:/keys/id_ed25519:ro
+      - ./test/guest-probe.sh:/repo/test/guest-probe.sh:ro

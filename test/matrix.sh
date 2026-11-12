@@ -161,5 +161,39 @@ cp /tmp/cfg.bak gw-data/config.yaml
 echo "## S11 guest IPv6 defaults"
 ssh -i "$SSH_KEY" -o ConnectTimeout=6 -o BatchMode=yes "root@$GUEST" 'ip -6 route show default 2>/dev/null | head -n 2' 2>/dev/null | sed 's/^/  /'
 
+gssh() { ssh -i "$SSH_KEY" -o ConnectTimeout=6 -o BatchMode=yes -o StrictHostKeyChecking=no \
+  -o UserKnownHostsFile=/dev/null "root@$GUEST" "$1" 2>/dev/null; }
+# A rejected connection can still complete its handshake inside mihomo's TUN, so the probe
+# asks for an HTTP answer: that only exists when the data actually reached the target.
+blocked() { # name host port
+  local out
+  out=$(gssh "curl -sS -m 4 -o /dev/null http://$2:$3/ >/dev/null 2>&1 && echo OPEN || echo BLOCKED")
+  check "$1" BLOCKED "$out"
+}
+
+echo "## S12 guest cannot reach this host"
+blocked "guest -> host sshd" 192.168.122.1 22
+blocked "guest -> host mihomo" 192.168.122.1 "${MIXED_PORT:-11095}"
+blocked "guest -> host panel" 192.168.122.1 "${PANEL_PORT:-11088}"
+check "guest -> host dns proxy allowed" OPEN \
+  "$(gssh "timeout 3 bash -c '</dev/tcp/192.168.122.1/${DNS_PORT:-1053}' >/dev/null 2>&1 && echo OPEN || echo BLOCKED")"
+
+echo "## S13 guest cannot reach the home LAN"
+blocked "guest -> home gateway" 192.168.0.1 80
+
+echo "## S14 guest IPv6 stays off"
+v6=$(gssh 'ip -6 addr show scope global 2>/dev/null | grep -c inet6')
+dis=$(gssh 'sysctl -n net.ipv6.conf.all.disable_ipv6')
+check "no global IPv6 address" 0 "${v6:-?}"
+check "IPv6 disabled by sysctl" 1 "${dis:-?}"
+
+echo "## S15 panel end-to-end test endpoint"
+pt=$(curl -s -m 90 "http://127.0.0.1:${PANEL_PORT:-11088}/api/test" \
+  | python3 -c 'import json,sys
+d=json.load(sys.stdin)["checks"]
+bad=[c["name"] for c in d if not c["ok"]]
+print("PASS" if d and not bad else "FAIL:"+",".join(bad))' 2>/dev/null)
+check "panel /api/test" PASS "${pt:-FAIL:no-response}"
+
 echo
 if [ "$fail" -eq 0 ]; then echo "RESULT: all scenarios passed"; else echo "RESULT: $fail scenario(s) FAILED"; fi

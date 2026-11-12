@@ -85,15 +85,21 @@ echo "--- cache ---"
 ./cache/setup-cache.sh
 echo "--- gateway ---"
 
-docker compose build
-docker compose up -d --remove-orphans
+# Build only when the image is missing: the base images need Docker Hub, and a rerun of the
+# stack should not depend on that. FORCE_BUILD=1 after a Dockerfile change.
+if [ "${FORCE_BUILD:-0}" = 1 ] || ! docker image inspect agent-gw-core:latest >/dev/null 2>&1; then
+  docker compose build
+fi
+docker compose up -d --remove-orphans --force-recreate
 
 # killswitch (host nft, always on)
-sudo install -m 0644 agent-vm-guard.service agent-vm-route.service /etc/systemd/system/
+sudo install -m 0644 agent-vm-guard.service agent-vm-route.service \
+  agent-vm-clock.service agent-vm-clock.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now agent-vm-guard.service
+sudo systemctl enable --now agent-vm-clock.timer
 sudo env VM_IP="$VM_IP" VM_MAC="$VM_MAC" SSH_PORT="${SSH_PORT:-2222}" TABLE="${TABLE:-200}" \
-  DNS_TARGET="192.168.122.1:${DNS_PORT:-1053}" HOME_CIDR="${HOME_CIDR:-192.168.0.0/24}" \
+  DNS_TARGET="192.168.122.1:${DNS_PORT:-1053}" DNS_PORT="${DNS_PORT:-1053}" \
   HOME_IF="${HOME_IF:-wlp6s0}" ./agent-vm-route.sh guard
 # route waits for tun-gw
 sudo systemctl enable --now agent-vm-route.service || {

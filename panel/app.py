@@ -199,8 +199,10 @@ def run_tests():
     cfg = api("/configs") or {}
     proxies = (api("/proxies") or {}).get("proxies") or {}
     exit_all = (proxies.get("EXIT") or {}).get("all") or []
-    add("no DIRECT fallback", cfg.get("mode") == "rule" and "DIRECT" not in exit_all,
-        f"mode={cfg.get('mode')} exit={','.join(exit_all) or '?'}")
+    g_now = (proxies.get("GLOBAL") or {}).get("now")
+    add("no DIRECT fallback",
+        cfg.get("mode") == "global" and "DIRECT" not in exit_all and g_now == "EXIT",
+        f"mode={cfg.get('mode')} exit={','.join(exit_all) or '?'} global={g_now}")
 
     gw_label, gw_ip = gateway_egress()
     add("gateway egress", bool(gw_ip), gw_label)

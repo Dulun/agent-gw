@@ -34,13 +34,13 @@ proxy client is a **separate** instance and must never be able to influence the 
   (written to `/etc/nftables.conf`, loaded by `nftables.service`, never deleted by this repo).
   Stopping or flushing the dynamic layer must not open a path; only editing `/etc/nftables.conf`
   can relax the lock. Do not move lock rules into the script-owned table.
-- **No private destination leaves through the node.** mihomo rejects RFC1918, link-local,
-  CGNAT and metadata ranges, so a guest that dials the home LAN or 169.254.169.254 is refused
-  instead of being tunnelled.
-- **No `DIRECT` reachable.** `mode:` must stay `rule`, `rules` must end in `MATCH,EXIT`, and no
-  proxy-group may list `DIRECT`. A `GLOBAL` group must exist and point at `EXIT` so an API mode
-  switch cannot fall back to the built-in `DIRECT` (that fallback dials from the host, where the
-  FORWARD-only nft guard cannot see it).
+- **No private destination leaves through the node.** Global mode ignores proxy rules, so the
+  RFC1918 / link-local / loopback / metadata block lives in the nft guard itself and applies to
+  every mode.
+- **No `DIRECT` reachable.** `mode: global` with a `GLOBAL` group that lists exactly `EXIT`, and no
+  proxy-group may list `DIRECT`. A global-mode switch to the built-in group would dial from the
+  host, where the FORWARD-only nft guard cannot see it, so both the renderer and the container
+  watchdog pin `GLOBAL -> EXIT` (watchdog re-asserts `mode` and `GLOBAL` every 10s).
 - **Two independent proxies.** The host's desktop client and `agent-gw-core` share nothing but the
   physical NIC. Node server IPs are pinned `/32` through the physical interface by `pin_nodes`,
   because a desktop TUN with `auto-route` otherwise swallows the gateway's own dial.

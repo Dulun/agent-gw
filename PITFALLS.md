@@ -259,3 +259,16 @@ Symptom: a page in the guest could open STUN/TURN flows; only 3478/5349/19302 we
 Fix: the guard drops all guest UDP at the forward hook (WebRTC, QUIC, mDNS, NTP), mihomo adds
 `NETWORK,UDP,REJECT` as a second layer, and DNS keeps working because it is dnat'd to the host.
 `test/leak.sh` probes STUN over UDP and TCP every round.
+
+## 18. Global mode is only safe when GLOBAL is defined
+
+Symptom: `GLOBAL.now = DIRECT` even though the template said `GLOBAL -> EXIT`.
+
+Cause: `merge_nodes()` rewrote `proxy-groups` to just `EXIT`; mihomo then created its own `GLOBAL`
+defaulting to `DIRECT`. Rule mode hid it, and one API call to `mode: global` would have leaked
+from the host, where the FORWARD-only guard cannot see the dial.
+
+Fix: the renderer writes `GLOBAL -> EXIT` explicitly, the assertion rejects a global config whose
+`GLOBAL` is not exactly `['EXIT']`, the container watchdog re-asserts `mode: global` and
+`GLOBAL: EXIT` every 10s, and the panel checks the live group. Private/metadata destinations moved
+into nft because global mode ignores proxy rules.

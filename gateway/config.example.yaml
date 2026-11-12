@@ -3,7 +3,10 @@
 mixed-port: ${MIXED_PORT:-11095}
 allow-lan: false
 bind-address: 127.0.0.1
-mode: rule
+# Global mode: every connection goes to the GLOBAL group, which setup.sh pins to EXIT and the
+# container watchdog re-pins every 10s. Rule mode is equivalent here (rules = rejects + MATCH,EXIT),
+# but global removes any chance of a rule list drifting; DIRECT must stay unreachable either way.
+mode: global
 experimental:
   ignore-resolve-fail: true
 sniffer:

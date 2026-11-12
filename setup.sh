@@ -42,7 +42,11 @@ dst['proxies'] = proxies
 want = os.environ.get('EXIT_NODE') or names[0]
 dst['rules'] = [r for r in (dst.get('rules') or []) if not r.startswith('MATCH,')]
 dst['rules'].append('MATCH,EXIT')
-dst['proxy-groups'] = [{'name': 'EXIT', 'type': 'select', 'proxies': names}]
+# GLOBAL is what mihomo uses if anything switches mode to global; without an explicit
+# definition it auto-creates one defaulting to DIRECT (a host-originated leak the
+# FORWARD-only nft guard cannot see).
+dst['proxy-groups'] = [{'name': 'EXIT', 'type': 'select', 'proxies': names},
+                       {'name': 'GLOBAL', 'type': 'select', 'proxies': ['EXIT']}]
 yaml.safe_dump(dst, open(sys.argv[2], 'w', encoding='utf-8'), allow_unicode=True)
 print(f"merged {len(names)} proxies, exit default={want} (switch live in panel)")
 EOF
@@ -71,8 +75,10 @@ import sys, yaml
 d = yaml.safe_load(open(sys.argv[1], encoding='utf-8')) or {}
 mode = d.get('mode', 'rule')
 groups = {g.get('name'): g for g in d.get('proxy-groups') or []}
-if mode == 'global' and 'GLOBAL' not in groups:
-    sys.exit('leak: mode: global without a GLOBAL group falls back to DIRECT')
+if mode == 'global':
+    g = groups.get('GLOBAL') or {}
+    if g.get('proxies') != ['EXIT']:
+        sys.exit('leak: mode: global needs GLOBAL -> EXIT exactly, else DIRECT is reachable')
 for g in groups.values():
     if 'DIRECT' in (g.get('proxies') or []):
         sys.exit(f"leak: proxy-group {g.get('name')} can select DIRECT")

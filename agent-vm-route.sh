@@ -51,6 +51,8 @@ guard() {
   nft add rule inet "$NFT_GUARD" egress meta nfproto ipv6 counter drop
   # No UDP from the guest: that is WebRTC (STUN/TURN), QUIC, mDNS, NTP. HTTPS falls back to TCP.
   nft add rule inet "$NFT_GUARD" egress ether saddr "$VM_MAC" meta l4proto udp counter drop
+  # Global mode ignores the proxy's private-IP rejects, so the RFC1918/metadata block lives here.
+  nft add rule inet "$NFT_GUARD" egress ether saddr "$VM_MAC" ip daddr '{ 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 127.0.0.0/8 }' counter drop
   nft add rule inet "$NFT_GUARD" egress ether saddr "$VM_MAC" oifname "$TUN_DEV" counter accept
   nft add rule inet "$NFT_GUARD" egress ether saddr "$VM_MAC" counter drop
   # input: host -> guest stays possible (output hook), guest -> host does not, except the DNS
@@ -82,6 +84,7 @@ table inet agentvm_lock {
     type filter hook forward priority filter + 5; policy accept;
     meta nfproto ipv6 counter drop
     ether saddr ${mac} meta l4proto udp counter drop
+    ether saddr ${mac} ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 127.0.0.0/8 } counter drop
     ether saddr ${mac} oifname "${TUN_DEV}" accept
     ether saddr ${mac} counter drop
     iifname "${LAN_IF}" counter drop

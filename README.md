@@ -40,7 +40,7 @@ interface or is dropped. It never falls back to direct.
 
 ## Rules that keep it fail-closed
 
-- `mode: rule` + `MATCH,EXIT`; no group may reach `DIRECT`.
+- `mode: global` + `GLOBAL -> EXIT` pinned by setup and by a 10s watchdog; no group may reach `DIRECT`.
 - A `GLOBAL` group points at `EXIT`, so an API mode switch cannot fall back to `DIRECT`.
 - Node server IPs are pinned `/32` through the physical NIC, so the host's desktop TUN cannot
   capture the gateway's own dial.

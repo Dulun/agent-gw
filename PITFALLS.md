@@ -201,3 +201,61 @@ so the probe raced the boot.
 
 Fix: `wait_for` polls until the expected state is observed twice, 3s apart. Any scenario script must
 wait for stability, not for a fixed sleep.
+
+## 12. The guest could reach the home LAN and this host directly
+
+Symptom: from the guest, `curl 192.168.0.1` answered and `ssh 192.168.122.1` was open.
+
+Cause: `agent-vm-route.sh guard` accepted `oifname virbr0` and `ip daddr $HOME_CIDR`, and table
+200 carried a `HOME_CIDR dev $HOME_IF` route. Both were deliberate in the first version ("guest may
+use the LAN") and both are a bypass of the tunnel.
+
+Fix: the forward chain accepts only `oifname tun-gw`; the `HOME_CIDR` route and accept rules are
+gone; an input chain drops guest traffic to the host except the DNS proxy port; mihomo rejects
+private/metadata destinations so they cannot be tunnelled either. S12/S13 in `test/matrix.sh`.
+
+## 13. IPv6 came from the golden image, not from a policy
+
+Symptom: `disable_ipv6=1` held only because that image had it; a rebuilt guest would have had a
+working v6 stack, and the guard had no v6 rule at all.
+
+Fix: `vm/user-data.template.yaml` writes `/etc/sysctl.d/99-agent-vm.conf`, and both guard layers
+drop `meta nfproto ipv6` before any accept rule. S14 checks it.
+
+## 14. The guest clock drifted once NTP was gone
+
+Symptom: after removing the guest's network path to NTP, the clock drifted and timestamps in logs
+stopped matching the host.
+
+Fix: `agent-vm-clock.timer` runs `virsh domtime <vm> --sync` every minute over qemu-guest-agent;
+the guest timezone stays `America/Los_Angeles` and `systemd-timesyncd` is disabled in cloud-init.
+
+## 15. `docker compose build` cannot reach Docker Hub from this host
+
+Symptom: `failed to resolve source metadata for docker.io/library/python:3.13-alpine: dial tcp
+31.13.95.38:443: i/o timeout` (a poisoned DNS answer), while the running stack is fine.
+
+Cause: DNS for `registry-1.docker.io` resolves to a junk address when no proxy is in the path; the
+daemon has no proxy configured, so any rebuild needs Docker Hub directly.
+
+Fix: `setup.sh` builds only when the image is missing (`FORCE_BUILD=1` to force). Building the
+panel image on such a host needs the build proxy explicitly:
+`DOCKER_BUILDKIT=0 docker build --network host --build-arg https_proxy=$HOST_PROXY -t agent-gw-panel:latest panel`
+(`docker compose build` cannot reach the registry here).
+
+## 16. A config edit did not reach the running mihomo
+
+Symptom: `gw-data/config.yaml` had the new `IP-CIDR,...,REJECT` rules, `/rules` still showed two.
+
+Cause: the config is a bind-mounted file; `docker compose up -d` only compares service definitions,
+so a changed file does not restart the container.
+
+Fix: `setup.sh` uses `up -d --remove-orphans --force-recreate`.
+
+## 17. WebRTC had a TCP path and UDP was open
+
+Symptom: a page in the guest could open STUN/TURN flows; only 3478/5349/19302 were rejected.
+
+Fix: the guard drops all guest UDP at the forward hook (WebRTC, QUIC, mDNS, NTP), mihomo adds
+`NETWORK,UDP,REJECT` as a second layer, and DNS keeps working because it is dnat'd to the host.
+`test/leak.sh` probes STUN over UDP and TCP every round.

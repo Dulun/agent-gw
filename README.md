@@ -12,23 +12,31 @@ interface or is dropped. It never falls back to direct.
 | `vm/` | KVM guest definition: `setup-vm.sh` + cloud-init templates |
 | `gateway/config.example.yaml` | mihomo template rendered by `setup.sh` |
 | `gateway/Dockerfile` | mihomo baked in at build time (pinned version) |
-| `panel/` | the only Web UI: status + node switch (`:PANEL_PORT`) |
+| `panel/` | the only UI (`gw-web` container, host network): status, VM start/stop, node switch, leak test (`:PANEL_PORT`) |
 | `agent-vm-route.sh` | host nft guard + policy table 200 |
 | `agent-vm-{guard,route}.service` | systemd units (guard runs before libvirt) |
 | `gw-data/` | rendered runtime state (gitignored) |
 | `AGENTS.md` / `PITFALLS.md` | invariants for coding agents; every trap already hit |
 | `test/matrix.sh` | scenario matrix proving the guest never sees the home IP |
+| `test/leak.sh` | adversarial leak hunt run inside the guest (echo IPs, DoH/DoT, STUN, LAN, metadata) |
+| `test/guest-probe.sh` | the probe body both `leak.sh` and the panel's full network test feed into the guest |
 
 ## How it works
 
 - `gateway-core` runs mihomo with `auto-route: false`. It owns exactly one
   interface, `tun-gw`, and never touches the host main table.
 - `agent-vm-route.sh guard` (nft, matched by guest MAC) allows the guest only
-  onto `tun-gw`, `virbr0`, or the home CIDR. Everything else drops. Missing
-  TUN means no network, not a direct leak. Runs before libvirt at boot.
+  onto `tun-gw`; IPv6 is dropped, the home LAN is not reachable, and the host is
+  closed to the guest except the DNS proxy port. Missing TUN means no network,
+  not a direct leak. Runs before libvirt at boot.
 - `agent-vm-route.sh route` adds `from VM_IP table 200` with default via
   `tun-gw`; guest DNS is hijacked to the gateway mihomo (`:1053`).
-- Panel shows killswitch state (read-only, always on), egress IP, node list.
+- No UDP leaves the guest: WebRTC (STUN/TURN), QUIC, mDNS and NTP are all gone; DNS survives
+  because it is dnat'd to the host.
+- Panel shows killswitch state (always on), egress IP, node list, VM start/stop.
+  `GET /api/test` is the quick 10-check gate; `GET /api/test/full` adds the in-guest network
+  environment test (IP echoes, DoH/DoT, STUN, LAN/metadata, clock drift) — 22 checks total.
+- Guest clock follows the host via qemu-guest-agent (`agent-vm-clock.timer`), timezone LA.
 
 ## Rules that keep it fail-closed
 
@@ -55,7 +63,7 @@ cp .env.example .env && cp vm/vm.env.example vm.env && cp nodes.yaml.example nod
 # edit vm.env: GOLDEN_IMAGE (your golden qcow2), SSH_PUBKEYS
 # edit nodes.yaml: proxy list for this VM (or set PROXY_PROVIDER_URL in .env)
 ./setup.sh
-# panel: http://127.0.0.1:11088
+# panel (systemd, host): http://127.0.0.1:11088
 ```
 
 Rerun `./setup.sh` after `git pull`, reboot, or node rotation. It is idempotent.

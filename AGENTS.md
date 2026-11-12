@@ -15,7 +15,7 @@ proxy client is a **separate** instance and must never be able to influence the 
 | `.env` / `vm.env` / `nodes.yaml` | machine config and private nodes. Gitignored, never referenced from committed files. |
 | `gateway/config.example.yaml` | mihomo template rendered by `setup.sh` from the environment. |
 | `gateway/entrypoint.sh` | mihomo + table-200 watchdog inside the container. |
-| `panel/app.py` | the only Web UI: killswitch state, egress, node switch. |
+| `panel/app.py` | the only UI, `gw-web` container (host network, privileged): killswitch, egress, node switch, VM start/stop, leak test. |
 | `agent-vm-route.sh` | host nft guard, policy table 200, node-route pinning. |
 | `agent-vm-{guard,route}.service` | systemd units; guard starts before libvirt. |
 | `vm/` | guest definition: `setup-vm.sh` + cloud-init templates. |
@@ -25,10 +25,18 @@ proxy client is a **separate** instance and must never be able to influence the 
 
 - **Fail closed.** If `tun-gw`, the container, or the node is gone, the guest has no network.
   It must never reach the internet directly. Anything that weakens this is a bug, not a preference.
+- **No UDP leaves the guest.** That removes WebRTC (STUN/TURN), QUIC, mDNS and NTP in one rule;
+  DNS still works because it is dnat'd to the host, not forwarded. HTTPS falls back to TCP.
+- **The guest is v4-only and cannot reach this host.** The forward chain accepts only
+  `oifname tun-gw` for the guest MAC and drops IPv6 in both chains; the input chain drops
+  guest traffic to the host except the DNS proxy port. Host -> guest stays possible.
 - **Two layers of guard.** `agentvm_guard` (dynamic, owned by this repo) and `agentvm_lock`
   (written to `/etc/nftables.conf`, loaded by `nftables.service`, never deleted by this repo).
   Stopping or flushing the dynamic layer must not open a path; only editing `/etc/nftables.conf`
   can relax the lock. Do not move lock rules into the script-owned table.
+- **No private destination leaves through the node.** mihomo rejects RFC1918, link-local,
+  CGNAT and metadata ranges, so a guest that dials the home LAN or 169.254.169.254 is refused
+  instead of being tunnelled.
 - **No `DIRECT` reachable.** `mode:` must stay `rule`, `rules` must end in `MATCH,EXIT`, and no
   proxy-group may list `DIRECT`. A `GLOBAL` group must exist and point at `EXIT` so an API mode
   switch cannot fall back to the built-in `DIRECT` (that fallback dials from the host, where the
@@ -60,6 +68,8 @@ Requires the running stack (read-only):
 
 ```bash
 curl -s http://127.0.0.1:11088/api/status          # ks must be true
+curl -s http://127.0.0.1:11088/api/test            # every check must be ok
+curl -s http://127.0.0.1:11088/api/test/full       # + in-guest network environment test
 sudo ./agent-vm-route.sh status
 ssh root@192.168.122.200 'curl -s https://ipinfo.io/json'   # must be the node's egress
 ```
@@ -68,6 +78,7 @@ Negative test, the one that matters (briefly drops the guest's network):
 
 ```bash
 sudo test/matrix.sh    # all scenarios; PASS means the guest never saw the home IP
+test/leak.sh 3         # adversarial hunt inside the guest: echo services, DoH/DoT, STUN, LAN
 ```
 
 It stops the core, removes the policy route, flushes the dynamic guard, stops both units, reloads

@@ -29,6 +29,14 @@ __SSH_KEYS__
       net.ipv6.conf.all.disable_ipv6 = 1
       net.ipv6.conf.default.disable_ipv6 = 1
       net.ipv6.conf.lo.disable_ipv6 = 1
+  # Mouse on: without it the outer terminal is in alternate-screen mode, so the wheel turns
+  # into Up/Down (history) instead of scrolling tmux.
+  - path: /root/.tmux.conf
+    owner: root:root
+    permissions: '0644'
+    content: |
+      set -g mouse on
+      set -g history-limit 50000
   - path: /etc/netplan/99-agent-ip.yaml
     owner: root:root
     permissions: '0600'

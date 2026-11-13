@@ -292,6 +292,7 @@ td.detail{color:var(--muted);font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,m
 .summary{color:var(--muted);font-size:13px;margin:10px 0 0}
 .spin{color:var(--muted);font-size:14px}
 .badtext{color:var(--bad)}
+button:disabled{opacity:.5;cursor:progress}
 </style></head><body><div class="wrap">
 <header><h1>agent-gw</h1></header>
 <p class="sub">fail-closed egress for <b id="vmname">—</b> · no DIRECT path, ever</p>
@@ -313,8 +314,8 @@ td.detail{color:var(--muted);font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,m
   <button onclick="act('stop')">stop vm</button>
   <button class="primary wide" onclick="runTest('/api/test/full')">full network test</button>
   <button onclick="runTest('/api/test')">quick test</button>
-  <button class="danger wide" onclick="fetch('/api/reset-conns',{method:'POST'}).then(st)">drop connections</button>
-</div></div>
+  <button class="danger wide" onclick="act('reset-conns')">drop connections</button>
+</div><p class="summary" id="msg"></p></div>
 </div>
 
 <div class="card"><h2>nodes</h2><div class="nodes" id="nodes"></div></div>
@@ -335,8 +336,20 @@ async function st(){try{const r=await (await fetch('/api/status')).json();
  $('tsip').textContent=r.tailscale_ip||'—';$('mdns').textContent=r.magic_dns||'—';
  $('nodes').innerHTML=r.nodes.map(n=>`<button aria-pressed="${n===r.node}" ${n===r.node?'class="active"':`onclick="sw('${esc(n)}')"`}>${esc(n)}</button>`).join('');
 }catch(e){}}
-async function sw(n){await fetch('/api/switch-node',{method:'POST',body:JSON.stringify({node:n})});setTimeout(st,1200);}
-async function act(a){await fetch('/api/vm/'+a,{method:'POST'});setTimeout(st,2500);}
+async function busy(on){document.querySelectorAll('.actions button,.nodes button').forEach(b=>b.disabled=on);}
+function say(text,bad){$('msg').className='summary'+(bad?' badtext':'');$('msg').textContent=text;}
+async function sw(n){busy(true);say('switching to '+n+'…');
+ try{const r=await (await fetch('/api/switch-node',{method:'POST',body:JSON.stringify({node:n})})).json();
+  say(r.ok?'node → '+r.node:'cannot switch: '+(r.error||'rejected'),!r.ok);
+ }catch(e){say('request failed: '+e.message,true);}
+ finally{busy(false);st();}}
+async function act(a){
+ const label={start:'start vm',stop:'stop vm','reset-conns':'drop connections'}[a]||a;
+ busy(true);say(label+'…');
+ try{const r=await (await fetch('/api/'+(a==='reset-conns'?'reset-conns':'vm/'+a),{method:'POST'})).json();
+  say(label+' → '+(r.out||(r.ok?'ok':'failed')),!r.ok);
+ }catch(e){say(label+' → request failed: '+e.message,true);}
+ finally{busy(false);st();}}
 async function runTest(u){
  const t0=Date.now();
  $('test').innerHTML='<tr><td class="spin" id="tspin">running… 0s</td></tr>';$('summary').textContent='';
@@ -416,9 +429,11 @@ class H(BaseHTTPRequestHandler):
             api("/connections", "DELETE")
             self._json({"ok": True, "node": want})
         elif self.path == "/api/vm/start":
-            self._json({"ok": True, "out": sh(f"virsh -q start {shlex.quote(VM_NAME)} 2>&1", timeout=60)})
+            out = sh(f"virsh -q start {shlex.quote(VM_NAME)} 2>&1", timeout=60).strip()
+            self._json({"ok": not out, "out": out or "started"})
         elif self.path == "/api/vm/stop":
-            self._json({"ok": True, "out": sh(f"virsh -q shutdown {shlex.quote(VM_NAME)} 2>&1", timeout=60)})
+            out = sh(f"virsh -q shutdown {shlex.quote(VM_NAME)} 2>&1", timeout=60).strip()
+            self._json({"ok": not out, "out": out or "shutdown requested"})
         elif self.path == "/api/reset-conns":
             api("/connections", "DELETE")
             self._json({"ok": True})

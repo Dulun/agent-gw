@@ -24,6 +24,8 @@ PRIO="${PRIO:-5200}"
 DNS_TARGET="${DNS_TARGET:-192.168.122.1:1053}"
 DNS_PORT="${DNS_PORT:-1053}"
 CTRL_PORT="${CTRL_PORT:-11098}"
+# host-side caches (cache/compose.yaml): apt, npm, docker hub, docker mcr
+CACHE_PORTS="${CACHE_PORTS:-3142,4873,5000,5001}"
 VM_NAME="${VM_NAME:-agent-vm-xlarge}"
 HOME_IF="${HOME_IF:-wlp6s0}"
 SSH_PORT="${SSH_PORT:-2222}"
@@ -63,6 +65,8 @@ guard() {
   nft add rule inet "$NFT_GUARD" ingress iifname "$LAN_IF" ether saddr "$VM_MAC" ct state established,related counter accept
   nft add rule inet "$NFT_GUARD" ingress iifname "$LAN_IF" ether saddr "$VM_MAC" udp dport "$DNS_PORT" counter accept
   nft add rule inet "$NFT_GUARD" ingress iifname "$LAN_IF" ether saddr "$VM_MAC" tcp dport "$DNS_PORT" counter accept
+  # host-side package/registry caches: the guest's only other way to reach this host
+  nft add rule inet "$NFT_GUARD" ingress iifname "$LAN_IF" ether saddr "$VM_MAC" tcp dport "{ $CACHE_PORTS }" counter accept
   nft add rule inet "$NFT_GUARD" ingress iifname "$LAN_IF" ether saddr "$VM_MAC" counter drop
   # The proxy controller is the one place that can make DIRECT reachable again. The guest is
   # already firewalled off it; this also keeps local non-root users off it (the panel runs as root).
@@ -104,6 +108,7 @@ table inet agentvm_lock {
     iifname "${LAN_IF}" ether saddr ${mac} ct state established,related accept
     iifname "${LAN_IF}" ether saddr ${mac} udp dport ${DNS_PORT} accept
     iifname "${LAN_IF}" ether saddr ${mac} tcp dport ${DNS_PORT} accept
+    iifname "${LAN_IF}" ether saddr ${mac} tcp dport { ${CACHE_PORTS} } accept
     iifname "${LAN_IF}" ether saddr ${mac} counter drop
   }
 }

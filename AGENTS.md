@@ -42,6 +42,9 @@ proxy client is a **separate** instance and must never be able to influence the 
   `DIRECT`/`REJECT`. `mode`/`GLOBAL` have no endpoint at all.
 - **The panel has no auth, so it listens on loopback.** `PANEL_BIND` defaults to `127.0.0.1`;
   exposing it on a LAN/tailnet interface hands VM stop/start and node switching to anyone.
+- **The guest may reach exactly four host ports besides DNS**: `3142,4873,5000,5001` (apt, npm,
+  docker hub, docker mcr caches from `cache/compose.yaml`). Everything else on the host stays
+  dropped; the cache misses themselves egress from the host, not the guest.
 - **The controller is root-only.** `external-controller` stays on `127.0.0.1`; an nft output rule
   drops port `$CTRL_PORT` for any socket whose uid is not 0, and `.env` is mode 600. The guest
   cannot reach it either (input chain allows only the DNS proxy port).

@@ -310,8 +310,8 @@ button:disabled{opacity:.5;cursor:progress}
   <dt>magicdns</dt><dd id="mdns">…</dd>
 </dl></div>
 <div class="card"><h2>controls</h2><div class="actions col">
-  <button onclick="act('start')">start vm</button>
-  <button onclick="act('stop')">stop vm</button>
+  <button id="bstart" onclick="act('start')">start vm</button>
+  <button id="bstop" onclick="act('stop')">stop vm</button>
   <button class="primary wide" onclick="runTest('/api/test/full')">full network test</button>
   <button onclick="runTest('/api/test')">quick test</button>
   <button class="danger wide" onclick="act('reset-conns')">drop connections</button>
@@ -330,6 +330,7 @@ async function st(){try{const r=await (await fetch('/api/status')).json();
  $('ks').textContent=r.ks?'ON':'OFF';$('ksdot').className='dot '+(r.ks?'ok':'bad');
  $('vm').textContent=r.vm;if(r.vmname)$('vmname').textContent=r.vmname;
  if(r.stale)$('node').textContent=r.node+' (last known)';$('vmdot').className='dot '+(r.vm==='running'?'ok':'bad');
+ $('bstart').disabled=r.vm==='running';$('bstop').disabled=r.vm!=='running';
  $('node').textContent=r.node;$('dr').textContent=r.drops;
  $('ksdot').style.opacity=r.stale?'.45':'1';
  $('egip').textContent=(r.egress||'').split(' ').pop()||'—';$('lan').textContent=r.lan||'—';
